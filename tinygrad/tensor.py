@@ -12,7 +12,11 @@ cl_ctx, cl_queue = None, None
 def require_init_gpu():
   global cl_ctx, cl_queue
   if cl_queue is None:
-    cl_ctx = cl.create_some_context(answers=[0,2])  # change if you don't have mac
+    try:
+      # for Macbook 16 inch
+      cl_ctx = cl.create_some_context(answers=[0,2])
+    except (cl._cl.RuntimeError, TypeError):
+      cl_ctx = cl.create_some_context(interactive=False)
     cl_queue = cl.CommandQueue(cl_ctx)
 
 # **** start with two base classes ****
@@ -69,7 +73,7 @@ class Tensor:
   @staticmethod
   def eye(dim):
     return Tensor(np.eye(dim).astype(np.float32))
-    
+
   def backward(self, allow_fill=True):
     #print("running backward on", self)
     if self._ctx is None:
@@ -102,7 +106,10 @@ class Tensor:
     if self.gpu:
       data = np.empty(self.shape, dtype=np.float32)
       cl.enqueue_copy(cl_queue, data, self.data)
-      return Tensor(data)
+      ret = Tensor(data)
+      if self.grad:
+        ret.grad = self.grad.cpu()
+      return ret
     else:
       return self
 
@@ -116,10 +123,13 @@ class Tensor:
     if not self.gpu:
       require_init_gpu()
       assert self.data.dtype == np.float32   # only float32 on GPU
-      data = cl.Buffer(cl_ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.data)
+      data = cl.Buffer(cl_ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.data.ravel())
       data.shape = self.shape
       data.dtype = self.data.dtype
-      return Tensor(data)
+      ret = Tensor(data)
+      if self.grad:
+        ret.grad = self.grad.cuda()
+      return ret
     else:
       return self
 

@@ -46,7 +46,8 @@ class Div(Function):
   def backward(ctx, grad_output):
     x,y = ctx.saved_tensors
     return grad_output / y, -x * grad_output / y**2
-register('div', Div)
+# TODO: registering this breaks the default div on the GPU
+#register('div', Div)
 
 class Pow(Function):
   @staticmethod
@@ -136,10 +137,11 @@ register('relu', ReLU)
 class Sigmoid(Function):
   @staticmethod
   def forward(ctx, input):
-    # TODO: stable sigmoid? does the overflow matter?
     with np.warnings.catch_warnings():
       np.warnings.filterwarnings('ignore')
-      ret = 1/(1 + np.exp(-input))
+      ret = np.where(
+          input >= 0,1/(1 + np.exp(-input)),np.exp(input)/(1 + np.exp(input))
+      )
     ctx.save_for_backward(ret)
     return ret
 
@@ -164,7 +166,7 @@ class LogSoftmax(Function):
   @staticmethod
   def backward(ctx, grad_output):
     output, = ctx.saved_tensors
-    return grad_output - np.exp(output)*grad_output.sum(axis=1).reshape((-1, 1))
+    return grad_output - np.exp(output)*(grad_output.sum(axis=1).reshape((-1, 1)))
 register('logsoftmax', LogSoftmax)
 
 

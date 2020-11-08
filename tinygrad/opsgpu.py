@@ -164,6 +164,18 @@ class Mul(Function):
            binary_op(ctx, 'a*b', x, grad_output)
 register('mul', Mul, gpu=True)
 
+class Div(Function):
+  @staticmethod
+  def forward(ctx, x, y):
+    ctx.save_for_backward(x, y)
+    return binary_op(ctx, 'a/b', x, y)
+
+  @staticmethod
+  def backward(ctx, grad_output):
+    x,y = ctx.saved_tensors
+    return binary_op(ctx, 'a/b', grad_output, y), \
+           binary_op(ctx, 'b/(a*a)', y, binary_op(ctx, '-a*b', x, grad_output))
+
 class Pow(Function):
   @staticmethod
   def forward(ctx, x, y):

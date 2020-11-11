@@ -1,5 +1,4 @@
 import numpy as np
-import os
 
 def mask_like(like, mask_inx, mask_value = 1.0):
   mask = np.zeros_like(like).reshape(-1)
@@ -23,13 +22,4 @@ def fetch(url):
       f.write(dat)
     os.rename(fp+".tmp", fp)
   return dat
-
-def fetch_mnist():
-  import gzip
-  parse = lambda dat: np.frombuffer(gzip.decompress(dat), dtype=np.uint8).copy()
-  X_train = parse(fetch("http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz"))[0x10:].reshape((-1, 28, 28))
-  Y_train = parse(fetch("http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz"))[8:]
-  X_test = parse(fetch("http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz"))[0x10:].reshape((-1, 28, 28))
-  Y_test = parse(fetch("http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz"))[8:]
-  return X_train, Y_train, X_test, Y_test
 

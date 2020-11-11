@@ -1,3 +1,5 @@
+import sys
+import warnings
 import numpy as np
 from .tensor import Function, register
 
@@ -20,7 +22,6 @@ class Sub(Function):
 
   @staticmethod
   def backward(ctx, grad_output):
-    # this right?
     return grad_output, -grad_output
 register('sub', Sub)
 
@@ -97,13 +98,15 @@ register('matmul', Dot)
 class Pad2D(Function):
   @staticmethod
   def forward(ctx, x, padding=None):
+    ctx.save_for_backward(padding)
     return np.pad(x,
       ((0,0), (0,0),
-       (padding[0], padding[1]), (padding[2], padding[3])))
+       (padding[2], padding[3]), (padding[0], padding[1])))
 
   @staticmethod
   def backward(ctx, grad_output):
-    raise Exception("write this")
+    padding, = ctx.saved_tensors
+    return grad_output[..., padding[2]:-padding[3], padding[0]:-padding[1]]
 register('pad2d', Pad2D)
 
 class Reshape(Function):
@@ -139,8 +142,9 @@ class Sigmoid(Function):
   def forward(ctx, input):
     with np.warnings.catch_warnings():
       np.warnings.filterwarnings('ignore')
-      ret = np.where(
-          input >= 0,1/(1 + np.exp(-input)),np.exp(input)/(1 + np.exp(input))
+      ret = np.where(input >= 0,
+        1/(1 + np.exp(-input)),
+        np.exp(input)/(1 + np.exp(input))
       )
     ctx.save_for_backward(ret)
     return ret

@@ -4,25 +4,33 @@ import numpy as np
 from .tensor import Function, register
 
 # ************* basic ops *************
+def unbroadcast(out, in_sh):
+  # adjoint operation to broadcast is sum. Need to sum all axis with 1 = in_sh[i] < out.shape[i]
+  sum_axis = tuple([i for i in range(len(in_sh)) if in_sh[i]==1 and out.shape[i]>1]) if in_sh != (1,) else None
+  return out.sum(axis=sum_axis).reshape(in_sh)
 
 class Add(Function):
   @staticmethod
   def forward(ctx, x, y):
+    ctx.save_for_backward(x.shape, y.shape)
     return x+y
 
   @staticmethod
   def backward(ctx, grad_output):
-    return grad_output, grad_output
+    shape_x, shape_y = ctx.saved_tensors
+    return unbroadcast(grad_output, shape_x), unbroadcast(grad_output, shape_y)
 register('add', Add)
 
 class Sub(Function):
   @staticmethod
   def forward(ctx, x, y):
+    ctx.save_for_backward(x.shape, y.shape)
     return x-y
 
   @staticmethod
   def backward(ctx, grad_output):
-    return grad_output, -grad_output
+    shape_x, shape_y = ctx.saved_tensors
+    return unbroadcast(grad_output, shape_x), unbroadcast(-grad_output, shape_y)
 register('sub', Sub)
 
 class Mul(Function):
@@ -34,21 +42,8 @@ class Mul(Function):
   @staticmethod
   def backward(ctx, grad_output):
     x,y = ctx.saved_tensors
-    return y*grad_output, x*grad_output
+    return unbroadcast(y*grad_output, x.shape), unbroadcast(x*grad_output, y.shape)
 register('mul', Mul)
-
-class Div(Function):
-  @staticmethod
-  def forward(ctx, x, y):
-    ctx.save_for_backward(x, y)
-    return x / y
-
-  @staticmethod
-  def backward(ctx, grad_output):
-    x,y = ctx.saved_tensors
-    return grad_output / y, -x * grad_output / y**2
-# TODO: registering this breaks the default div on the GPU
-#register('div', Div)
 
 class Pow(Function):
   @staticmethod
@@ -59,19 +54,21 @@ class Pow(Function):
   @staticmethod
   def backward(ctx, grad_output):
     x,y = ctx.saved_tensors
-    return y * (x**(y-1.0)) * grad_output, (x**y) * np.log(x) * grad_output
+    return unbroadcast(y * (x**(y-1.0)) * grad_output, x.shape), \
+           unbroadcast((x**y) * np.log(x) * grad_output, y.shape)
 register('pow', Pow)
 
 class Sum(Function):
   @staticmethod
-  def forward(ctx, input):
-    ctx.save_for_backward(input)
-    return np.array([input.sum()])
+  def forward(ctx, input,axis=None):
+    ctx.save_for_backward(input, axis)
+    return np.array([input.sum()]) if axis is None else input.sum(axis=axis)
 
   @staticmethod
   def backward(ctx, grad_output):
-    input, = ctx.saved_tensors
-    return grad_output * np.ones_like(input)
+    input, axis = ctx.saved_tensors
+    shape = [1 if axis is None or i in axis else input.shape[i] for i in range(len(input.shape))]
+    return grad_output.reshape(shape) + np.zeros_like(input)
 register('sum', Sum)
 
 
@@ -205,7 +202,6 @@ class Conv2D(Function):
       #ijYXyx,kjyx -> iYXk ->ikYX
       ret[:,g] += np.tensordot(tx[:,g], tw[g], ((1,4,5),(1,2,3)))
     return np.moveaxis(ret,4,2).reshape(bs, cout, oy, ox)
-
 
   @staticmethod
   def backward(ctx, grad_output):

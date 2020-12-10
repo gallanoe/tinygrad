@@ -1,7 +1,10 @@
 import numpy as np
+from tinygrad.tensor import Tensor
 
-from .utils import mask_like
-from .tensor import Tensor
+def mask_like(like, mask_inx, mask_value = 1.0):
+  mask = np.zeros_like(like).reshape(-1)
+  mask[mask_inx] = mask_value
+  return mask.reshape(like.shape)
 
 def jacobian(func, input):
   output = func(input)
@@ -11,6 +14,9 @@ def jacobian(func, input):
   J = np.zeros((jo,ji), dtype=np.float32)
 
   for o in range(jo):
+    input.grad = None
+    output = func(input)
+
     # tinygrad doesn't support slicing, tiny-hack to select
     # the needed scalar an backpropagate only through it
     o_scalar = Tensor(mask_like(output.data, o, 1.)).mul(output).sum()
